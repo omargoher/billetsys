@@ -40,6 +40,8 @@ import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
 @Produces(MediaType.TEXT_HTML)
 @Blocking
 public class CategoryResource {
+    @jakarta.inject.Inject
+    ai.mnemosyne_systems.service.EventService eventService;
 
     @GET
     public Response list(@CookieParam(AuthHelper.AUTH_COOKIE) String auth) {
@@ -95,6 +97,8 @@ public class CategoryResource {
         category.description = description == null ? "" : description.trim();
         category.isDefault = makeDefault;
         category.persist();
+        eventService.record(category.id, ai.mnemosyne_systems.model.event.EventConstants.CATEGORY_CREATED, null,
+                AuthHelper.findUser(auth).id, "Category created");
         List<Attachment> attachments = storeAttachments(category,
                 AttachmentHelper.readAttachments(input, "attachments"));
         category.description = resolveInlineAttachmentUrls(category.description, attachments);
@@ -162,6 +166,8 @@ public class CategoryResource {
             throw new NotFoundException();
         }
         Attachment.delete("category", category);
+        eventService.record(category.id, ai.mnemosyne_systems.model.event.EventConstants.CATEGORY_DELETED, null,
+                AuthHelper.findUser(auth).id, "Category deleted");
         category.delete();
         return ReactRedirectSupport.redirect(client, "/categories");
     }
@@ -172,6 +178,8 @@ public class CategoryResource {
             upload.article = null;
             upload.category = category;
             upload.persist();
+            eventService.record(upload.id, ai.mnemosyne_systems.model.event.EventConstants.ATTACHMENT_CREATED, null,
+                    null, "Attachment created");
             category.attachments.add(upload);
         }
         Panache.getEntityManager().flush();

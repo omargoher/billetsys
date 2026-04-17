@@ -45,6 +45,8 @@ import java.util.List;
 @Produces(MediaType.TEXT_HTML)
 @Blocking
 public class CompanyResource {
+    @jakarta.inject.Inject
+    ai.mnemosyne_systems.service.EventService eventService;
 
     @GET
     public Response listCompanies(@CookieParam(AuthHelper.AUTH_COOKIE) String auth) {
@@ -109,6 +111,8 @@ public class CompanyResource {
         company.users = resolveUsers(userIds, tamIds, null);
         company.phoneNumber = phoneNumber;
         company.persist();
+        eventService.record(company.id, ai.mnemosyne_systems.model.event.EventConstants.COMPANY_CREATED, company.id,
+                AuthHelper.findUser(auth).id, "Company created");
         applyEntitlements(company, entitlementIds, levelIds, entitlementDates, entitlementDurations,
                 java.util.List.of());
         return ReactRedirectSupport.redirect(client, "/companies");
@@ -164,6 +168,8 @@ public class CompanyResource {
             if (Ticket.count("companyEntitlement", entry) > 0) {
                 continue;
             }
+            eventService.record(entry.id, ai.mnemosyne_systems.model.event.EventConstants.COMPANY_ENTITLEMENT_DELETED,
+                    company.id, AuthHelper.findUser(auth).id, "Company entitlement deleted");
             entry.delete();
         }
         return ReactRedirectSupport.redirect(client, "/companies");
@@ -179,6 +185,8 @@ public class CompanyResource {
         if (company == null) {
             throw new NotFoundException();
         }
+        eventService.record(company.id, ai.mnemosyne_systems.model.event.EventConstants.COMPANY_DELETED, company.id,
+                AuthHelper.findUser(auth).id, "Company deleted");
         company.delete();
         return ReactRedirectSupport.redirect(client, "/companies");
     }
@@ -268,6 +276,9 @@ public class CompanyResource {
                 entry.date = entitlementDate;
                 entry.duration = entitlementDuration;
                 entry.persist();
+                eventService.record(entry.id,
+                        ai.mnemosyne_systems.model.event.EventConstants.COMPANY_ENTITLEMENT_CREATED, company.id, null,
+                        "Company entitlement created");
             }
         }
         return selectedEntitlementPairs;

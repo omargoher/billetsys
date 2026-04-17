@@ -16,6 +16,7 @@ import ai.mnemosyne_systems.model.Ticket;
 import ai.mnemosyne_systems.model.User;
 import ai.mnemosyne_systems.model.Version;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -23,6 +24,9 @@ import java.util.Set;
 
 @ApplicationScoped
 public class TicketCreationService {
+
+    @Inject
+    EventService eventService;
 
     public Ticket createTicketWithInitialMessage(TicketCreationRequest request) {
         Ticket ticket = new Ticket();
@@ -36,6 +40,7 @@ public class TicketCreationService {
         ticket.category = request.category() == null ? Category.findDefault() : request.category();
         ticket.externalIssueLink = trimOrNull(request.externalIssueLink());
         ticket.persist();
+        eventService.saveTicketEvent(ticket, request.requester());
         assignCompanyTams(ticket);
 
         Message message = new Message();
@@ -45,6 +50,8 @@ public class TicketCreationService {
         message.author = request.requester();
         message.isPublic = request.initialMessagePublic();
         message.persist();
+        // Message ids are available after persist for sequence-backed entities.
+        eventService.recordMessageCreated(message);
         return ticket;
     }
 

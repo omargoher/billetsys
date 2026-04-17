@@ -41,6 +41,9 @@ import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
 @Produces(MediaType.TEXT_HTML)
 @Blocking
 public class ArticleResource {
+    @jakarta.inject.Inject
+    ai.mnemosyne_systems.service.EventService eventService;
+
     private static final String SAMPLE_TITLE = "Getting Started Guide";
     private static final String SAMPLE_TAGS = "guide, onboarding";
     private static final String SAMPLE_BODY = "## Welcome to billetsys\n\n- Open a ticket from the Tickets menu\n- Use Markdown in messages\n- Attach files with the attachment picker";
@@ -97,6 +100,8 @@ public class ArticleResource {
         article.tags = tags == null ? null : tags.trim();
         article.body = body.trim();
         article.persist();
+        eventService.record(article.id, ai.mnemosyne_systems.model.event.EventConstants.ARTICLE_CREATED, null,
+                AuthHelper.findUser(auth).id, "Article created");
         List<Attachment> attachments = storeAttachments(article,
                 AttachmentHelper.readAttachments(input, "attachments"));
         article.body = resolveInlineAttachmentUrls(article.body, attachments);
@@ -139,6 +144,8 @@ public class ArticleResource {
         if (article == null) {
             throw new NotFoundException();
         }
+        eventService.record(article.id, ai.mnemosyne_systems.model.event.EventConstants.ARTICLE_DELETED, null,
+                AuthHelper.findUser(auth).id, "Article deleted");
         article.delete();
         return ReactRedirectSupport.redirect(client, "/articles");
     }
@@ -148,6 +155,8 @@ public class ArticleResource {
             upload.message = null;
             upload.article = article;
             upload.persist();
+            eventService.record(upload.id, ai.mnemosyne_systems.model.event.EventConstants.ATTACHMENT_CREATED, null,
+                    null, "Attachment created");
             article.attachments.add(upload);
         }
         Panache.getEntityManager().flush();

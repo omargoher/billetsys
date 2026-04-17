@@ -42,6 +42,9 @@ import java.util.Map;
 @Produces(MediaType.TEXT_HTML)
 @Blocking
 public class EntitlementResource {
+    @jakarta.inject.Inject
+    ai.mnemosyne_systems.service.EventService eventService;
+
     @GET
     public Response listEntitlements(@CookieParam(AuthHelper.AUTH_COOKIE) String auth) {
         requireAdmin(auth);
@@ -92,6 +95,8 @@ public class EntitlementResource {
         entitlement.versions.clear();
         entitlement.versions.addAll(resolveVersions(entitlement, null, versionIds, versionNames, versionDates));
         entitlement.persist();
+        eventService.record(entitlement.id, ai.mnemosyne_systems.model.event.EventConstants.ENTITLEMENT_CREATED, null,
+                AuthHelper.findUser(auth).id, "Entitlement created");
         return ReactRedirectSupport.redirect(client, "/entitlements");
     }
 
@@ -131,6 +136,8 @@ public class EntitlementResource {
         if (entitlement == null) {
             throw new NotFoundException();
         }
+        eventService.record(entitlement.id, ai.mnemosyne_systems.model.event.EventConstants.ENTITLEMENT_DELETED, null,
+                AuthHelper.findUser(auth).id, "Entitlement deleted");
         entitlement.delete();
         return ReactRedirectSupport.redirect(client, "/entitlements");
     }

@@ -19,6 +19,7 @@ import ai.mnemosyne_systems.model.Timezone;
 import ai.mnemosyne_systems.model.User;
 import ai.mnemosyne_systems.model.Version;
 import ai.mnemosyne_systems.service.CrossReferenceService;
+import ai.mnemosyne_systems.service.EventService;
 import ai.mnemosyne_systems.service.TicketEmailService;
 import ai.mnemosyne_systems.util.AttachmentHelper;
 import ai.mnemosyne_systems.util.AuthHelper;
@@ -46,7 +47,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -67,6 +67,9 @@ public class SuperuserResource {
 
     @Inject
     TicketEmailService ticketEmailService;
+
+    @Inject
+    EventService eventService;
 
     @GET
     @Path("superuser")
@@ -139,6 +142,8 @@ public class SuperuserResource {
             newUser.passwordHash = BcryptUtil.bcryptHash(password);
         }
         newUser.persist();
+        eventService.record(newUser.id, ai.mnemosyne_systems.model.event.EventConstants.USER_CREATED, company.id,
+                user.id, "User created");
         addUserIfMissing(company, newUser);
         return Response.seeOther(URI.create("/superuser/users/" + company.id)).build();
     }
@@ -218,6 +223,7 @@ public class SuperuserResource {
         ticket.category = categoryId != null ? Category.findById(categoryId) : Category.findDefault();
         ticket.persist();
         boolean isPublic = AttachmentHelper.readFormBoolean(input, "isPublic", true);
+        eventService.saveTicketEvent(ticket, ticket.requester);
         Message message = new Message();
         message.body = messageBody.trim();
         message.date = LocalDateTime.now();
@@ -227,6 +233,7 @@ public class SuperuserResource {
         List<Attachment> attachments = AttachmentHelper.readAttachments(input, "attachments");
         AttachmentHelper.attachToMessage(message, attachments);
         message.persistAndFlush();
+        eventService.recordMessageCreated(message);
         crossReferenceService.extractAndSaveReferences(message, null);
         AttachmentHelper.resolveInlineAttachmentUrls(message, attachments);
         ticketEmailService.notifyMessageChange(ticket, message, user);
@@ -321,6 +328,7 @@ public class SuperuserResource {
         List<Attachment> attachments = AttachmentHelper.readAttachments(input, "attachments");
         AttachmentHelper.attachToMessage(message, attachments);
         message.persistAndFlush();
+        eventService.recordMessageCreated(message);
         crossReferenceService.extractAndSaveReferences(message, null);
         AttachmentHelper.resolveInlineAttachmentUrls(message, attachments);
         ticketEmailService.notifyMessageChange(ticket, message, user);
@@ -356,6 +364,7 @@ public class SuperuserResource {
         ticket.title = normalizedTitle;
         ticket.affectsVersion = resolveVersionForTicket(ticket, affectsVersionId, "Affects");
         ticket.resolvedVersion = resolveOptionalVersionForTicket(ticket, resolvedVersionId, "Resolved");
+        eventService.saveTicketEvent(ticket, user);
         return ReactRedirectSupport.redirect(client, "/superuser/tickets/" + id);
     }
 

@@ -11,6 +11,8 @@ package ai.mnemosyne_systems.resource;
 import ai.mnemosyne_systems.model.Company;
 import ai.mnemosyne_systems.model.Ticket;
 import ai.mnemosyne_systems.model.User;
+import ai.mnemosyne_systems.model.event.EventConstants;
+import ai.mnemosyne_systems.service.EventService;
 import ai.mnemosyne_systems.util.AuthHelper;
 import io.quarkus.elytron.security.common.BcryptUtil;
 import jakarta.transaction.Transactional;
@@ -30,6 +32,9 @@ import jakarta.ws.rs.FormParam;
 @Path("/api/{role}/tickets/{ticketId}/externals")
 @Produces(MediaType.APPLICATION_JSON)
 public class TicketExternalUsersApiResource {
+
+    @jakarta.inject.Inject
+    EventService eventService;
 
     @POST
     @Path("/add")
@@ -63,6 +68,8 @@ public class TicketExternalUsersApiResource {
             externalUser.type = User.TYPE_EXTERNAL;
             externalUser.passwordHash = User.DISABLED_PASSWORD_HASH;
             externalUser.persist();
+            eventService.record(externalUser.id, EventConstants.USER_CREATED,
+                    roleCompany == null ? null : roleCompany.id, currentUser.id, "User created");
 
             // Link to company
             roleCompany.users.add(externalUser);
@@ -76,6 +83,8 @@ public class TicketExternalUsersApiResource {
 
         if (!ticket.externalUsers.contains(externalUser)) {
             ticket.externalUsers.add(externalUser);
+            eventService.recordTicketUserAssociation(ticket, currentUser, externalUser,
+                    EventConstants.TICKET_EXTERNAL_USER_ADDED);
         }
 
         return Response.seeOther(URI.create("/api/" + role + "/tickets/" + ticket.id)).build();
@@ -106,6 +115,8 @@ public class TicketExternalUsersApiResource {
         }
 
         ticket.externalUsers.remove(externalUser);
+        eventService.recordTicketUserAssociation(ticket, currentUser, externalUser,
+                EventConstants.TICKET_EXTERNAL_USER_REMOVED);
 
         return Response.seeOther(URI.create("/api/" + role + "/tickets/" + ticket.id)).build();
     }

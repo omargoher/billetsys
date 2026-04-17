@@ -19,6 +19,7 @@ import ai.mnemosyne_systems.model.Version;
 import ai.mnemosyne_systems.model.Country;
 import ai.mnemosyne_systems.model.Timezone;
 import ai.mnemosyne_systems.service.CrossReferenceService;
+import ai.mnemosyne_systems.service.EventService;
 import ai.mnemosyne_systems.service.TicketEmailService;
 import ai.mnemosyne_systems.util.AttachmentHelper;
 import ai.mnemosyne_systems.util.AuthHelper;
@@ -43,8 +44,6 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,6 +59,9 @@ public class UserResource {
 
     @Inject
     TicketEmailService ticketEmailService;
+
+    @Inject
+    EventService eventService;
 
     @GET
     @Path("user")
@@ -175,6 +177,8 @@ public class UserResource {
             newUser.passwordHash = BcryptUtil.bcryptHash(password);
         }
         newUser.persist();
+        eventService.record(newUser.id, ai.mnemosyne_systems.model.event.EventConstants.USER_CREATED, company.id,
+                AuthHelper.findUser(auth).id, "User created");
         boolean exists = company.users.stream()
                 .anyMatch(existing -> existing.id != null && existing.id.equals(newUser.id));
         if (!exists) {
@@ -248,6 +252,7 @@ public class UserResource {
         ticket.category = categoryId != null ? Category.findById(categoryId) : Category.findDefault();
         ticket.persist();
         boolean isPublic = AttachmentHelper.readFormBoolean(input, "isPublic", true);
+        eventService.saveTicketEvent(ticket, user);
         Message message = new Message();
         message.body = messageBody.trim();
         message.date = java.time.LocalDateTime.now();
@@ -257,6 +262,7 @@ public class UserResource {
         List<Attachment> attachments = AttachmentHelper.readAttachments(input, "attachments");
         AttachmentHelper.attachToMessage(message, attachments);
         message.persistAndFlush();
+        eventService.recordMessageCreated(message);
         AttachmentHelper.resolveInlineAttachmentUrls(message, attachments);
         ticketEmailService.notifyMessageChange(ticket, message, user);
         return createTicketRedirect(client, "/user/tickets/" + ticket.id);
@@ -376,6 +382,7 @@ public class UserResource {
         List<Attachment> attachments = AttachmentHelper.readAttachments(input, "attachments");
         AttachmentHelper.attachToMessage(message, attachments);
         message.persistAndFlush();
+        eventService.recordMessageCreated(message);
         SupportTicketData data = buildTicketDataForUser(user);
         java.util.Set<Long> accessibleIds = TicketSearchSupport
                 .combineTickets(data.assignedTickets, data.openTickets, data.closedTickets).stream().map(t -> t.id)
@@ -417,6 +424,7 @@ public class UserResource {
         if (User.TYPE_TAM.equalsIgnoreCase(user.type)) {
             ticket.resolvedVersion = resolveOptionalVersionForTicket(ticket, resolvedVersionId, "Resolved");
         }
+        eventService.saveTicketEvent(ticket, user);
         return ReactRedirectSupport.redirect(client, "/user/tickets/" + id);
     }
 
@@ -500,6 +508,8 @@ public class UserResource {
             newUser.passwordHash = BcryptUtil.bcryptHash(password);
         }
         newUser.persist();
+        eventService.record(newUser.id, ai.mnemosyne_systems.model.event.EventConstants.USER_CREATED, null,
+                AuthHelper.findUser(auth).id, "User created");
         if (companyId != null) {
             Company company = Company.findById(companyId);
             if (company != null) {
@@ -573,6 +583,8 @@ public class UserResource {
             throw new NotFoundException();
         }
         removeUserReferences(deleteUser);
+        eventService.record(deleteUser.id, ai.mnemosyne_systems.model.event.EventConstants.USER_DELETED, null,
+                AuthHelper.findUser(auth).id, "User deleted");
         deleteUser.delete();
         return ReactRedirectSupport.redirect(client, "/users");
     }

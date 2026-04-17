@@ -11,6 +11,8 @@ package ai.mnemosyne_systems.resource;
 import ai.mnemosyne_systems.model.Company;
 import ai.mnemosyne_systems.model.Ticket;
 import ai.mnemosyne_systems.model.User;
+import ai.mnemosyne_systems.model.event.EventConstants;
+import ai.mnemosyne_systems.service.EventService;
 import ai.mnemosyne_systems.util.AuthHelper;
 import io.quarkus.elytron.security.common.BcryptUtil;
 import jakarta.transaction.Transactional;
@@ -30,6 +32,9 @@ import jakarta.ws.rs.FormParam;
 @Path("/api/{role}/tickets/{ticketId}/participants")
 @Produces(MediaType.APPLICATION_JSON)
 public class TicketParticipantUsersApiResource {
+
+    @jakarta.inject.Inject
+    EventService eventService;
 
     @POST
     @Path("/add")
@@ -68,6 +73,8 @@ public class TicketParticipantUsersApiResource {
             participantUser.type = User.TYPE_PARTICIPANT;
             participantUser.passwordHash = User.DISABLED_PASSWORD_HASH;
             participantUser.persist();
+            eventService.record(participantUser.id, EventConstants.USER_CREATED,
+                    roleCompany == null ? null : roleCompany.id, currentUser.id, "User created");
 
             // Link to company
             roleCompany.users.add(participantUser);
@@ -82,6 +89,8 @@ public class TicketParticipantUsersApiResource {
 
         if (!ticket.userUsers.contains(participantUser)) {
             ticket.userUsers.add(participantUser);
+            eventService.recordTicketUserAssociation(ticket, currentUser, participantUser,
+                    EventConstants.TICKET_PARTICIPANT_ADDED);
         }
 
         return Response.seeOther(URI.create("/api/" + role + "/tickets/" + ticket.id)).build();
@@ -117,6 +126,8 @@ public class TicketParticipantUsersApiResource {
         }
 
         ticket.userUsers.remove(participantUser);
+        eventService.recordTicketUserAssociation(ticket, currentUser, participantUser,
+                EventConstants.TICKET_PARTICIPANT_REMOVED);
 
         return Response.seeOther(URI.create("/api/" + role + "/tickets/" + ticket.id)).build();
     }

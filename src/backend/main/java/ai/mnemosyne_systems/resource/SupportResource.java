@@ -18,7 +18,9 @@ import ai.mnemosyne_systems.model.User;
 import ai.mnemosyne_systems.model.Version;
 import ai.mnemosyne_systems.model.Country;
 import ai.mnemosyne_systems.model.Timezone;
+import ai.mnemosyne_systems.model.event.EventConstants;
 import ai.mnemosyne_systems.service.CrossReferenceService;
+import ai.mnemosyne_systems.service.EventService;
 import ai.mnemosyne_systems.service.TicketEmailService;
 import ai.mnemosyne_systems.util.AttachmentHelper;
 import ai.mnemosyne_systems.util.AuthHelper;
@@ -45,11 +47,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
@@ -64,6 +62,8 @@ public class SupportResource {
 
     @Inject
     TicketEmailService ticketEmailService;
+    @Inject
+    EventService eventService;
 
     @GET
     public Response listTickets(@CookieParam(AuthHelper.AUTH_COOKIE) String auth) {
@@ -224,6 +224,8 @@ public class SupportResource {
             newUser.passwordHash = BcryptUtil.bcryptHash(password);
         }
         newUser.persist();
+        eventService.record(newUser.id, ai.mnemosyne_systems.model.event.EventConstants.USER_CREATED, company.id,
+                AuthHelper.findUser(auth).id, "User created");
         boolean exists = company.users.stream()
                 .anyMatch(existing -> existing.id != null && existing.id.equals(newUser.id));
         if (!exists) {
@@ -288,10 +290,12 @@ public class SupportResource {
         List<Attachment> attachments = AttachmentHelper.readAttachments(input, "attachments");
         AttachmentHelper.attachToMessage(message, attachments);
         message.persistAndFlush();
+        eventService.recordMessageCreated(message);
         crossReferenceService.extractAndSaveReferences(message, null);
         AttachmentHelper.resolveInlineAttachmentUrls(message, attachments);
         if (ticket.supportUsers.stream().noneMatch(existing -> existing.id != null && existing.id.equals(user.id))) {
             ticket.supportUsers.add(user);
+            eventService.recordTicketUserAssociation(ticket, user, user, EventConstants.TICKET_SUPPORT_USER_ADDED);
         }
         if (ticket.status == null || ticket.status.isBlank() || "Open".equalsIgnoreCase(ticket.status)) {
             ticket.status = "Assigned";
@@ -299,6 +303,7 @@ public class SupportResource {
         if (!sameStatus(previousStatus, ticket.status)) {
             ticketEmailService.notifyStatusChange(ticket, previousStatus, user);
         }
+        eventService.saveTicketEvent(ticket, user);
         ticketEmailService.notifyMessageChange(ticket, message, user);
         return Response.seeOther(URI.create("/support/tickets/" + id + "?replyAdded=1")).build();
     }
@@ -354,6 +359,7 @@ public class SupportResource {
         ticket.affectsVersion = resolveVersion(entitlement, affectsVersionId, "Affects", true);
         ticket.category = categoryId != null ? Category.findById(categoryId) : Category.findDefault();
         ticket.persist();
+        eventService.saveTicketEvent(ticket, user);
         assignCompanyTams(ticket);
         boolean isPublic = AttachmentHelper.readFormBoolean(input, "isPublic", true);
         Message message = new Message();
@@ -365,6 +371,7 @@ public class SupportResource {
         List<Attachment> attachments = AttachmentHelper.readAttachments(input, "attachments");
         AttachmentHelper.attachToMessage(message, attachments);
         message.persistAndFlush();
+        eventService.recordMessageCreated(message);
         AttachmentHelper.resolveInlineAttachmentUrls(message, attachments);
         ticketEmailService.notifyMessageChange(ticket, message, user);
         return createTicketRedirect(client, "/support/tickets/" + ticket.id);
@@ -429,12 +436,14 @@ public class SupportResource {
                     .anyMatch(existing -> existing.id != null && existing.id.equals(user.id));
             if (!assigned) {
                 ticket.supportUsers.add(user);
+                eventService.recordTicketUserAssociation(ticket, user, user, EventConstants.TICKET_SUPPORT_USER_ADDED);
             }
         }
         assignCompanyTams(ticket);
         if (!sameStatus(previousStatus, ticket.status)) {
             ticketEmailService.notifyStatusChange(ticket, previousStatus, user);
         }
+        eventService.saveTicketEvent(ticket, user);
         return createTicketRedirect(client, "/support/tickets/" + id);
     }
 
@@ -451,6 +460,7 @@ public class SupportResource {
         String previousStatus = ticketEmailService.computeEffectiveStatus(ticket, ticket.status);
         if (ticket.supportUsers.stream().noneMatch(existing -> existing.id != null && existing.id.equals(user.id))) {
             ticket.supportUsers.add(user);
+            eventService.recordTicketUserAssociation(ticket, user, user, EventConstants.TICKET_SUPPORT_USER_ADDED);
         }
         if (ticket.status == null || ticket.status.isBlank() || "Open".equalsIgnoreCase(ticket.status)) {
             ticket.status = "Assigned";
@@ -459,6 +469,7 @@ public class SupportResource {
         if (!sameStatus(previousStatus, ticket.status)) {
             ticketEmailService.notifyStatusChange(ticket, previousStatus, user);
         }
+        eventService.saveTicketEvent(ticket, user);
         return createTicketRedirect(client, "/support/tickets/" + id);
     }
 
@@ -483,6 +494,7 @@ public class SupportResource {
         for (User tam : tams) {
             if (tam.id != null && !existingIds.contains(tam.id)) {
                 ticket.tamUsers.add(tam);
+                eventService.recordTicketUserAssociation(ticket, null, tam, EventConstants.TICKET_TAM_ADDED);
             }
         }
     }

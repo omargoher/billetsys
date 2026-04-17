@@ -37,6 +37,9 @@ import java.util.List;
 @Produces(MediaType.TEXT_HTML)
 @Blocking
 public class LevelResource {
+    @jakarta.inject.Inject
+    ai.mnemosyne_systems.service.EventService eventService;
+
     public static final class ColorOption {
         private final String value;
         private final String label;
@@ -123,6 +126,8 @@ public class LevelResource {
         level.timezone = timezoneId != null ? Timezone.findById(timezoneId)
                 : Timezone.find("name", "America/New_York").firstResult();
         level.persist();
+        eventService.record(level.id, ai.mnemosyne_systems.model.event.EventConstants.LEVEL_CREATED, null,
+                AuthHelper.findUser(auth).id, "Level created");
         return ReactRedirectSupport.redirect(client, "/levels");
     }
 
@@ -176,6 +181,8 @@ public class LevelResource {
         if (level == null) {
             throw new NotFoundException();
         }
+        eventService.record(level.id, ai.mnemosyne_systems.model.event.EventConstants.LEVEL_DELETED, null,
+                AuthHelper.findUser(auth).id, "Level deleted");
         level.delete();
         return ReactRedirectSupport.redirect(client, "/levels");
     }

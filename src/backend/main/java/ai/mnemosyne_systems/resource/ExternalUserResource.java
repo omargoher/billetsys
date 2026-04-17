@@ -27,6 +27,8 @@ import java.util.UUID;
 @Produces(MediaType.TEXT_HTML)
 @io.smallrye.common.annotation.Blocking
 public class ExternalUserResource {
+    @jakarta.inject.Inject
+    ai.mnemosyne_systems.service.EventService eventService;
 
     @POST
     @Path("{role}/externals")
@@ -79,6 +81,8 @@ public class ExternalUserResource {
         }
 
         user.persist();
+        eventService.record(user.id, ai.mnemosyne_systems.model.event.EventConstants.USER_CREATED,
+                company == null ? null : company.id, AuthHelper.findUser(auth).id, "User created");
         company.users.add(user);
 
         return Response.seeOther(URI.create("/" + role + "/externals")).build();
@@ -152,6 +156,8 @@ public class ExternalUserResource {
         }
 
         userCompany.users.remove(user);
+        eventService.record(user.id, ai.mnemosyne_systems.model.event.EventConstants.USER_DELETED, null,
+                AuthHelper.findUser(auth).id, "User deleted");
         user.delete();
 
         return Response.seeOther(URI.create("/" + role + "/externals")).build();
