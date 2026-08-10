@@ -26,8 +26,8 @@ public class TicketAutoCloseService {
     @Inject
     TicketEmailService ticketEmailService;
 
-    // Run once a day at 2 AM
-    @Scheduled(cron = "0 0 2 * * ?")
+    // Run once a day at a DST-independent time so auto-close notifications are never skipped or duplicated.
+    @Scheduled(cron = "0 0 2 * * ?", timeZone = "${ticket.scheduler.timezone}")
     @Transactional
     public void autoCloseTickets() {
         int autoCloseDays = resolveAutoCloseDays();

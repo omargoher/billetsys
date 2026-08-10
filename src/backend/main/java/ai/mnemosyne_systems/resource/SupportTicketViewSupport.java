@@ -13,7 +13,7 @@ import ai.mnemosyne_systems.model.Message;
 import ai.mnemosyne_systems.model.Ticket;
 import ai.mnemosyne_systems.model.User;
 import ai.mnemosyne_systems.model.Version;
-import java.time.Duration;
+import ai.mnemosyne_systems.util.TicketTimeSupport;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -147,10 +147,7 @@ final class SupportTicketViewSupport {
                     || ticket.companyEntitlement.supportLevel == null) {
                 continue;
             }
-            long minutes = Duration.between(messageDate, now).toMinutes();
-            if (minutes < 0) {
-                minutes = 0;
-            }
+            long minutes = TicketTimeSupport.elapsedMinutes(messageDate, now);
             String color = resolveSlaColor(ticket.companyEntitlement.supportLevel, minutes);
             if (color != null && !color.isBlank()) {
                 slaColors.put(ticket.id, color);

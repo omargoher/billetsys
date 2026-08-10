@@ -23,6 +23,7 @@ import ai.mnemosyne_systems.service.EventService;
 import ai.mnemosyne_systems.service.TicketEmailService;
 import ai.mnemosyne_systems.util.AttachmentHelper;
 import ai.mnemosyne_systems.util.AuthHelper;
+import ai.mnemosyne_systems.util.TicketTimeSupport;
 import io.quarkus.hibernate.orm.panache.Panache;
 import io.quarkus.elytron.security.common.BcryptUtil;
 import io.smallrye.common.annotation.Blocking;
@@ -734,10 +735,7 @@ public class UserResource {
                     || ticket.companyEntitlement.supportLevel == null) {
                 continue;
             }
-            long minutes = java.time.Duration.between(messageDate, now).toMinutes();
-            if (minutes < 0) {
-                minutes = 0;
-            }
+            long minutes = TicketTimeSupport.elapsedMinutes(messageDate, now);
             String color = resolveSlaColor(ticket.companyEntitlement.supportLevel, minutes);
             if (color != null && !color.isBlank()) {
                 slaColors.put(ticket.id, color);
